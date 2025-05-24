@@ -102,6 +102,31 @@ class Diffuser:
 		noise = torch.randn_like(x_0, device=self.device)
 		x_t = torch.sqrt(alpha_bar) * x_0 + torch.sqrt(1 - alpha_bar) * noise
 		return x_t, noise
+	
+	def denoise(self, model, x, t):
+		T = self.num_timesteps
+		assert(1 <= t <= self.num_timesteps).all()
+
+		alpha = self.alphas[t - 1]
+		alpha_bar = self.alpha_bars[t - 1]
+		alpha_bar_prev = self.alpha_bars[t - 2]
+
+		N = alpha.size()
+		alpha = alpha.view(N, 1, 1, 1)
+		alpha_bar = alpha_bar.view(N, 1, 1, 1)
+		alpha_bar_prev = alpha_bar_prev.view(N, 1, 1, 1)
+
+		model.eval()
+		with torch.no_grad():
+			eps = model(x, t)
+			model.train()
+
+			noise = torch.randn_like(x, device=self.device)
+			noise[t == 1] = 0
+
+			mu = (x - ((1 - alpha) / torch.sqrt(1 - alpha_bar)) * eps) / torch.sqrt(alpha)
+			std = torch.sqrt((1 - alpha) * (1 - alpha_bar_prev) / (1 - alpha_bar))
+			return mu + noise * std
 
 if __name__ == "__main__":
 	v = pos_encoding(torch.tensor([1, 2, 3]), 16)
