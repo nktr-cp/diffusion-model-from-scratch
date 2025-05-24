@@ -1,6 +1,31 @@
 import torch
 from torch import nn
 
+# Positional Encoding
+def _pos_encoding(time: int, output_dim, device='cpu'):
+	D = output_dim
+	encoded_vector = torch.zeros(D, device=device)
+
+	# [0, 1, ..., D-1]
+	i = torch.arange(0, D, device=device)
+	div_term = 10000 ** (i / D)
+
+	# i: even
+	encoded_vector[0::2] = torch.sin(time / div_term[0::2])
+	# i: odd
+	encoded_vector[1::2] = torch.cos(time / div_term[1::2])
+	
+	return encoded_vector
+
+def pos_encoding(times: torch.tensor, output_dim, device='cpu'):
+	batch_size = len(times)
+	encoded_matrix = torch.zeros(batch_size, output_dim, device=device)
+
+	for i in range(batch_size):
+		encoded_matrix[i] = _pos_encoding(times[i], output_dim, device)
+
+	return encoded_matrix
+
 class ConvBlock(nn.Module):
 	def __init__(self, in_ch, out_ch, time_embed_dim):
 		super().__init__()
@@ -58,30 +83,25 @@ class UNet(nn.Module):
 		x = self.out(x)
 		return x
 
-# Positional Encoding
-def _pos_encoding(time: int, output_dim, device='cpu'):
-	D = output_dim
-	encoded_vector = torch.zeros(D, device=device)
-
-	# [0, 1, ..., D-1]
-	i = torch.arange(0, D, device=device)
-	div_term = 10000 ** (i / D)
-
-	# i: even
-	encoded_vector[0::2] = torch.sin(time / div_term[0::2])
-	# i: odd
-	encoded_vector[1::2] = torch.cos(time / div_term[1::2])
+class Diffuser:
+	def __init__(self, num_timesteps=1000, beta_start=0.0001, beta_end=0.02, device='cpu'):
+		self.num_timesteps = num_timesteps
+		self.device = device
+		self.betas = torch.linspace(beta_start, beta_end, num_timesteps, device=device)
+		self.alphas = 1 - self.betas
+		self.alpha_bars = torch.cumpord(self.alphas, dim=0)
 	
-	return encoded_vector
+	def add_noise(self, x_0, t):
+		T = self.num_timesteps
+		assert (1 <= t <= self.num_timesteps).all()
 
-def pos_encoding(times: torch.tensor, output_dim, device='cpu'):
-	batch_size = len(times)
-	encoded_matrix = torch.zeros(batch_size, output_dim, device=device)
+		alpha_bar = self.alpha_bars(t - 1)
+		N = alpha_bar.size(0)
+		alpha_bar = alpha_bar.view(N, 1, 1, 1)
 
-	for i in range(batch_size):
-		encoded_matrix[i] = _pos_encoding(times[i], output_dim, device)
-
-	return encoded_matrix
+		noise = torch.randn_like(x_0, device=self.device)
+		x_t = torch.sqrt(alpha_bar) * x_0 + torch.sqrt(1 - alpha_bar) * noise
+		return x_t, noise
 
 if __name__ == "__main__":
 	v = pos_encoding(torch.tensor([1, 2, 3]), 16)
