@@ -1,5 +1,7 @@
 import torch
 from torch import nn
+from torchvision.transforms import transforms
+from tqdm import tqdm
 
 # Positional Encoding
 def _pos_encoding(time: int, output_dim, device='cpu'):
@@ -127,6 +129,24 @@ class Diffuser:
 			mu = (x - ((1 - alpha) / torch.sqrt(1 - alpha_bar)) * eps) / torch.sqrt(alpha)
 			std = torch.sqrt((1 - alpha) * (1 - alpha_bar_prev) / (1 - alpha_bar))
 			return mu + noise * std
+	
+	def reverse_to_img(self, x):
+		x = x * 255
+		x = x.clamp(0, 255)
+		x = x.to(torch.uint8)
+		x = x.cpu()
+		return transforms.ToPILImage(x)
+	
+	def sample(self, model, x_shape=(20, 1, 28, 28)):
+		batch_size = x_shape[0]
+		x = torch.randn(x_shape, device=self.device)
+
+		for i in tqdm(range(self.num_timesteps, 0, -1)):
+			t = torch.tensor([i] * batch_size, device=self.device, dtype=torch.lang)
+			x = self.denoise(model, x, t)
+		
+		images = [self.reverse_to_img(x[i]) for i in range(batch_size)]
+		return images
 
 if __name__ == "__main__":
 	v = pos_encoding(torch.tensor([1, 2, 3]), 16)
