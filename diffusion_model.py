@@ -1,7 +1,31 @@
+import math
 import torch
+import torchvision
+import matplotlib.pyplot as plt
+from torchvision import transforms
+from torch.utils.data import DataLoader
+import torch.nn.functional as F
 from torch import nn
-from torchvision.transforms import transforms
 from tqdm import tqdm
+
+# hyper parameters
+img_size = 28
+batch_size = 128
+num_timesteps = 1000
+epochs = 10
+lr = 1e-3
+device = 'cuda' if torch.cuda.is_avaiable() else 'cpu'
+
+def show_images(images, rows=2, cols=10):
+	fig = plt.figure(figsize=(cols, rows))
+	i = 0
+	for r in range(rows):
+		for c in range(cols):
+			fig.add_subplot(rows, cols, i + 1)
+			plt.imshow(images[i], cmap='gray')
+			plt.axis('off')
+			i += 1
+	plt.show()
 
 # Positional Encoding
 def _pos_encoding(time: int, output_dim, device='cpu'):
