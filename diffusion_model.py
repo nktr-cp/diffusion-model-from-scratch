@@ -93,7 +93,7 @@ class Diffuser:
 	
 	def add_noise(self, x_0, t):
 		T = self.num_timesteps
-		assert (1 <= t <= self.num_timesteps).all()
+		assert (1 <= t <= T).all()
 
 		alpha_bar = self.alpha_bars(t - 1)
 		N = alpha_bar.size(0)
@@ -105,7 +105,7 @@ class Diffuser:
 	
 	def denoise(self, model, x, t):
 		T = self.num_timesteps
-		assert(1 <= t <= self.num_timesteps).all()
+		assert(1 <= t <= T).all()
 
 		alpha = self.alphas[t - 1]
 		alpha_bar = self.alpha_bars[t - 1]
