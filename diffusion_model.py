@@ -4,6 +4,7 @@ import torchvision
 import matplotlib.pyplot as plt
 from torchvision import transforms
 from torch.utils.data import DataLoader
+from torch.optim import Adam
 import torch.nn.functional as F
 from torch import nn
 from tqdm import tqdm
@@ -14,7 +15,7 @@ batch_size = 128
 num_timesteps = 1000
 epochs = 10
 lr = 1e-3
-device = 'cuda' if torch.cuda.is_avaiable() else 'cpu'
+device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 def show_images(images, rows=2, cols=10):
 	fig = plt.figure(figsize=(cols, rows))
@@ -63,7 +64,7 @@ class ConvBlock(nn.Module):
 			nn.BatchNorm2d(out_ch),
 			nn.ReLU(),
 		)
-		self.mlp = nn.Sequencial(
+		self.mlp = nn.Sequential(
 			nn.Linear(time_embed_dim, in_ch),
 			nn.ReLU(),
 			nn.Linear(in_ch, in_ch)
@@ -115,13 +116,13 @@ class Diffuser:
 		self.device = device
 		self.betas = torch.linspace(beta_start, beta_end, num_timesteps, device=device)
 		self.alphas = 1 - self.betas
-		self.alpha_bars = torch.cumpord(self.alphas, dim=0)
+		self.alpha_bars = torch.cumprod(self.alphas, dim=0)
 	
 	def add_noise(self, x_0, t):
 		T = self.num_timesteps
-		assert (1 <= t <= T).all()
+		assert (1 <= t).all() and (t <= T).all()
 
-		alpha_bar = self.alpha_bars(t - 1)
+		alpha_bar = self.alpha_bars[t - 1]
 		N = alpha_bar.size(0)
 		alpha_bar = alpha_bar.view(N, 1, 1, 1)
 
@@ -131,7 +132,7 @@ class Diffuser:
 	
 	def denoise(self, model, x, t):
 		T = self.num_timesteps
-		assert(1 <= t <= T).all()
+		assert (1 <= t).all() and (t <= T).all()
 
 		alpha = self.alphas[t - 1]
 		alpha_bar = self.alpha_bars[t - 1]
@@ -166,12 +167,51 @@ class Diffuser:
 		x = torch.randn(x_shape, device=self.device)
 
 		for i in tqdm(range(self.num_timesteps, 0, -1)):
-			t = torch.tensor([i] * batch_size, device=self.device, dtype=torch.lang)
+			t = torch.tensor([i] * batch_size, device=self.device, dtype=torch.long)
 			x = self.denoise(model, x, t)
 		
 		images = [self.reverse_to_img(x[i]) for i in range(batch_size)]
 		return images
 
 if __name__ == "__main__":
-	v = pos_encoding(torch.tensor([1, 2, 3]), 16)
-	print(v.shape)
+	preprocess = transforms.ToTensor()
+	dataset = torchvision.datasets.MNIST(root='./data', download=True, transform=preprocess)
+	dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
+
+	diffuser = Diffuser(num_timesteps, device=device)
+	model = UNet()
+	model.to(device)
+	optimizer = Adam(model.parameters(), lr=lr)
+
+	losses = []
+	for epoch in range(epochs):
+		loss_sum = 0.0
+		count = 0
+
+		for images, labels in tqdm(dataloader):
+			optimizer.zero_grad()
+			x = images.to(device)
+			t = torch.randint(1, num_timesteps + 1, (len(x), ), device=device)
+
+			x_noisy, noise = diffuser.add_noise(x, t)
+			noise_pred = model(x_noisy, t)
+			loss = F.mse_loss(noise, noise_pred)
+
+			loss.backward()
+			optimizer.step()
+
+			loss_sum += loss.item()
+			count += 1
+		
+		loss_avg = loss_sum / count
+		losses.append(loss_avg)
+		print(f'Epoch {epoch} | Loss: {loss_avg}')
+	
+	plt.plot(losses)
+	plt.xlabel('Epoch')
+	plt.ylabel('Loss')
+	plt.show()
+
+	images = diffuser.sample(model)
+	show_images(images)
+
