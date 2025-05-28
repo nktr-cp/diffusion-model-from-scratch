@@ -138,7 +138,7 @@ class Diffuser:
 		alpha_bar = self.alpha_bars[t - 1]
 		alpha_bar_prev = self.alpha_bars[t - 2]
 
-		N = alpha.size()
+		N = alpha.size(0)
 		alpha = alpha.view(N, 1, 1, 1)
 		alpha_bar = alpha_bar.view(N, 1, 1, 1)
 		alpha_bar_prev = alpha_bar_prev.view(N, 1, 1, 1)
@@ -160,7 +160,8 @@ class Diffuser:
 		x = x.clamp(0, 255)
 		x = x.to(torch.uint8)
 		x = x.cpu()
-		return transforms.ToPILImage(x)
+		to_pil = transforms.ToPILImage()
+		return to_pil(x)
 	
 	def sample(self, model, x_shape=(20, 1, 28, 28)):
 		batch_size = x_shape[0]
